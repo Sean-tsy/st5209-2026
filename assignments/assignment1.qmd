@@ -8,7 +8,7 @@ author: "Due 2 Feb, 11.59pm"
 ## Set up
 
 1.  Make sure you have the following installed on your system: $\text{\LaTeX}$, R4.2.2+, RStudio 2023.12+, and Quarto 1.3.450+.
-2.  Clone the course [repo](https://github.com/yanshuotan/st5209-2024).
+2.  Clone the course [repo](https://github.com/yanshuotan/st5209-2026).
 3.  Create a separate folder in the root directory of the repo, label it with your name, e.g. `yanshuo-assignments`
 4.  Copy the assignment1.qmd file over to this directory.
 5.  Modify the duplicated document with your solutions, writing all R code as code chunks.
