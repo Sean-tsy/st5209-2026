@@ -13,7 +13,7 @@ We always load the following packages.
 library(fpp3)
 library(tidyverse)
 ```
-
+1
 ## 1. Lags and differencing
 
 Consider the `aus_arrivals` dataset and try to plot lagged arrival values. What is strange about this plot? How can you fix it?
