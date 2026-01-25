@@ -13,10 +13,25 @@ We always load the following packages.
 library(fpp3)
 library(tidyverse)
 ```
-1
+
 ## 1. Lags and differencing
 
 Consider the `aus_arrivals` dataset and try to plot lagged arrival values. What is strange about this plot? How can you fix it?
+
+```{r}
+aus_arrivals
+
+aus_arrivals |>
+  mutate(laggedaus_arrivals = lag(Arrivals))|>
+  autoplot(laggedaus_arrivals)
+```
+
+```{r}
+aus_arrivals |>
+  group_by(Origin)|>
+  mutate(laggedaus_arrivals = lag(Arrivals))|>
+  autoplot(laggedaus_arrivals)
+```
 
 ## 2. Moving averages
 
@@ -24,22 +39,64 @@ Using the arrivals from Japan time series within `aus_arrivals`, do the followin
 
 -   Compute a moving average with window size 2 using two different methods: using `slide_dbl` and manually (i.e. without using `slide_dbl`). Show that you get the same answer.
 
+    ```{r}
+    library(slider)
+    aus_arrivals_jap<-
+      aus_arrivals |> filter(Origin == "Japan")
+      
+    aus_arrivals_jap |>
+      mutate(ArrivalsMA2 = slide_dbl(Arrivals, mean,.before=1,.after=0),
+             ArrivalsMA2_alt = (Arrivals+ lag(Arrivals)) / 2))
+    ```
+
 -   Plot moving averages with a few different window sizes to see the effect of varying the window size. Which window size would you pick?
+
+    ```{r}
+    library(viridis)
+    aus_arrivals_jap |>
+      mutate(ArrivalsMA2 = slide_dbl(Arrivals, mean,.before=1,.after=0),
+             ArrivalsMA4 = slide_dbl(Arrivals, mean,.before=2,.after=1),
+             ArrivalsMA6 = slide_dbl(Arrivals, mean,.before=3,.after=2)
+    )|>
+      pivot_longer(cols=contains("Arrivals"), names_to = "Type") |>
+
+      autoplot()+scale_color_viridis(discrete=TRUE )
+    ```
 
 ## 3. Log transform and differencing
 
 Let's consider the sales of diabetes drugs in Australia. The following code loads and plots this time series.
 
 ```{r}
-diabetes <- read_rds("../_data/cleaned/diabetes.rds")
+diabetes <- read_rds("/Users/tsy_02/st5209-2026/_data/cleaned//diabetes.rds")
 diabetes |> autoplot()
 ```
 
 -   Apply a log transformation and plot the result. What does it do to the seasonal fluctuations?
 
+    ```{r}
+    diabetes |> 
+      mutate(log_totalc = log(TotalC))|>
+      autoplot(log_totalc)
+    ```
+
 -   Take a difference of the log transformed time series. What is the meaning of the resulting time series?
 
+    ```{r}
+    diabetes |>
+      mutate(log_totalc = log(TotalC))|>
+      mutate(log_totalc_diff = difference(log_totalc))|>
+      autoplot(log_totalc_diff)
+    ```
+
 -   Take a seasonal difference of the log transformed time series. What is the meaning of the resulting time series? How does it compare with the time series obtained in the previous part?
+
+    ```{r}
+    diabetes |>
+      mutate(log_totalc = log(TotalC))|>
+      mutate(log_totalc_diff_12 = difference(log_totalc,12))|>
+      autoplot(log_totalc_diff_12)
+    ```
 
 ## 4. Computing classical decomposition
 
@@ -63,4 +120,25 @@ autoplot(melsyd_economy, Passengers) +
   labs(y = "Passengers ('000)")
 ```
 
-## 
+```{r}
+melsyd_economy |>
+  scan_gaps()
+```
+
+```{r}
+melsyd_economy<-melsyd_economy|>
+  fill_gaps(Passengers=(21.9+23.8)/2)
+```
+
+```{r}
+library(gridExtra)
+plt1 <- melsyd_economy |>
+  model(classical_decomposition(Passengers))|>
+  components()|>
+  autoplot()
+plt2 <- melsyd_economy |>
+  model(STL(Passengers,robust=TRUE))|>
+  components()|>
+  autoplot()
+grid.arrange(plt1,plt2,nrow=2)
+```
