@@ -41,7 +41,14 @@ tourism_features <- tourism |>
 
 Make a scatter plot of seasonal strength against trend strength and color the points according to `Purpose`. What can you tell from the plot?
 
-Perform PCA on the `tourism_features` dataframe and make a scatter plot of the first two PCs. What do you observe?
+Perform PCA on the `tourism_features` dataframe and make a scatter plot of the first two PCs. What do you observe? You may use the following code.
+
+```{r}
+pcs <- tourism_features |>
+  select(-State, -Region, -Purpose) |>
+  prcomp(scale = TRUE) |>
+  augment(tourism_features)
+```
 
 ## 4. Seasonal periods and frequencies
 
