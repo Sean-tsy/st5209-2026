@@ -1,0 +1,66 @@
+---
+title: "Week 5 Demonstration"
+format: html
+editor: visual
+---
+
+## Set up
+
+```{r}
+#| message: FALSE
+library(fpp3)
+library(tidyverse)
+library(slider)
+library(gridExtra)
+```
+
+## 1. Holt linear method and transformations
+
+Forecast China's GDP from the `global_economy` data set using the Holt linear trend method. Experiment with damping and Box-Cox transformations. Try to develop an intuition of what each is doing to the forecasts.
+
+## 2. Cross-validation
+
+a.  Perform cross-validation for the models identified in Q1.
+b.  How do their relative performance change as we vary the forecast horizon? You may use the following code snippet to generate the final table.
+
+```{r}
+results <- tibble(.model = colnames(fit))
+for (i in 1:10) {
+  tmp <- china_fc |> 
+  filter(h == 2 * i) |>
+  accuracy(china_gdp) |>
+  select(.model, MASE)
+  colnames(tmp) <- c(".model", as.character(2 * i))
+  results <- left_join(results, tmp)
+}
+results
+```
+
+## 3. ETS and decomposition
+
+a.  Fit a Holt-Winters multiplicative model to the diabetes dataset. Plot the model components. How can we interpret the components?
+b.  Fit a Holt-Winters additive model to a log transformed version of the diabetes dataset. Plot the model components. Why do the components have very different values compared to the multiplicative case?
+c.  How is this decomposition different from STL?
+
+## 4. Model parameters
+
+a.  For the models fit in Q1, how many parameters does each model have?
+b.  How are the parameters fitted?
+c.  How can we extract the model parameters?
+d.  How can you interpret the fitted parameters?
+
+## 5. Model selection
+
+a.  What happens when no formula is provided to `ETS`? Try this with the `gtemp_both` time series from the `astsa` package. You may use the following code to convert it to a tsibble.
+
+```{r}
+library(astsa)
+gtemp_both <- astsa::gtemp_both |>
+  as_tsibble() |>
+  rename(Year = index,
+         Temp = value)
+```
+
+a.  What happens when you filter the time series to before 1950?
+b.  What happens when you filter to before 2010?
+c.  Interpret the model parameters.
