@@ -59,7 +59,7 @@ Students are expected to have viewed and understood the lecture video before com
 - The lowest scoring assignment will be dropped.
 
 ## Final Exam
-- 04-May-2026 5:00 PM, location TBA. Exam will be administered via ExamSoft. It will be closed book, with an A4 double-sided cheat sheet allowed.
+- 04-May-2026 5:00 PM at MPSH2-A. Exam will be administered via ExamSoft. It will be closed book, with an A4 double-sided cheat sheet allowed.
 
 ## Q&A
 - We will use Ed Discussion to manage to course Q&A.
