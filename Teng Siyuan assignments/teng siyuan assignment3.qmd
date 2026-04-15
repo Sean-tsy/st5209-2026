@@ -1,0 +1,364 @@
+---
+title: "ST5209/X Assignment 3"
+format: pdf
+editor: visual
+author: "Teng Siyuan"
+---
+
+## Set up
+
+1.  Make sure you have the following installed on your system: $\text{\LaTeX}$, R4.2.2+, RStudio 2023.12+, and Quarto 1.3.450+.
+2.  Pull changes from the course [repo](https://github.com/yanshuotan/st5209-2024).
+3.  Create a separate folder in the root directory of the repo, label it with your name, e.g. `yanshuo-assignments`
+4.  Copy the assignment1.qmd file over to this directory.
+5.  Modify the duplicated document with your solutions, writing all R code as code chunks.
+6.  When running code, make sure your working directory is set to be the folder with your assignment .qmd file, e.g. `yanshuo-assignments`. This is to ensure that all file paths are valid.[^1]
+
+[^1]: You may view and set the working directory using `getwd()` and `setwd()`.
+
+## Submission
+
+1.  Render the document to get a .pdf printout.
+2.  Submit both the .qmd and .pdf files to Canvas.
+
+```{r}
+#| message: FALSE
+#| echo: FALSE
+library(tidyverse)
+library(fpp3)
+```
+
+## 1. Holt-Winters, residuals, and forecast accuracy
+
+Consider the antidiabetic drug sales time series which can be loaded using the following code snippet.
+
+```{r}
+diabetes <- read_rds("../_data/cleaned/diabetes.rds") |>
+  select(TotalC)
+```
+
+a.  Fit the following exponential smoothing models on the entire time series:
+
+    -   Holt-Winters with multiplicative noise and seasonality,
+    -   Holt-Winters with a log transformation, with additive noise and seasonality,
+    -   Holt-Winters with multiplicative noise and seasonality, and damping.
+
+    ```{r}
+    diabetes<-as_tsibble(diabetes)
+    dia_fit<-diabetes|>
+      model(
+        mult=ETS(TotalC~error("M")+trend("A")+season("M")),
+        log=ETS(log(TotalC)~error("A")+trend("A")+season("A")),
+        mult_damp=ETS(TotalC~error("M")+trend("Ad")+season("M"))
+      )
+    ```
+
+b.  Make ACF plots for the innovation residuals of these three models. Does this suggest that the residuals are drawn from a white noise model?
+
+    ```{r}
+    gg_tsresiduals(select(dia_fit,mult))
+    gg_tsresiduals(select(dia_fit,log))
+    gg_tsresiduals(select(dia_fit,mult_damp))
+    ```
+
+    The ACF plots for residuals of each model shows significant spikes (autocorrelations), suggesting the residuals are not consistent with white noise.
+
+c.  Calculate the p-value from a Ljung-Box test on the residuals with lag $h=8$. Does this suggest that the residuals are drawn from a white noise model? What does this mean about the fitted model?
+
+    ```{r}
+    dia_fit|>
+      augment()|>
+      features(.innov,ljung_box,lag=8)
+    ```
+
+    Since all the p-values are lower than 0.05, we reject the null hypothesis that the residuals are white noise. This means these models don't have a good fit to the data.
+
+d.  Perform time series cross-validation for the three methods, using `.init = 50` and `.step = 10`, and with the forecast horizon $h=4$. Which method has the best RMSSE? How many data points is the error averaged over in total?
+
+    ```{r}
+    dia_cv<-diabetes|>
+      stretch_tsibble(.step = 10,.init = 50)|>
+      model(
+        mult=ETS(TotalC~error("M")+trend("A")+season("M")),
+        log=ETS(log(TotalC)~error("A")+trend("A")+season("A")),
+        mult_damp=ETS(TotalC~error("M")+trend("Ad")+season("M"))
+      )
+
+    dia_forc<-dia_cv|>
+      forecast(h=4)
+
+    dia_forc|>
+      accuracy(diabetes)|>
+      select(.model,RMSSE)|>
+      arrange(RMSSE)
+    ```
+
+    We can find the log with additive method has the best RMSSE.
+
+    ```{r}
+    n<-nrow(diabetes)
+    steps<-ceiling((n-50)/10)
+    h<-4
+    print(steps*h)
+    ```
+
+    So the error is averaged over 64 data points.
+
+## 2. ETS parameters, prediction intervals
+
+The dataset `hh_budget` contains annual indicators of household budgets for a few countries.
+
+a.  Fit `ETS` on the time series comprising savings as a portion of household budgets in Canada. Do not specify what type of ETS model to fit, instead allowing the function to perform automatic model selection.
+
+    ```{r}
+    canada_savings<-hh_budget|>
+      filter(Country=="Canada")|>
+      select(Year,Savings)|>
+      as_tsibble(index=Year)
+    fit_savings<-canada_savings|>
+      model(ETS(Savings))
+    ```
+
+b.  Which ETS model was selected?
+
+    ```{r}
+    fit_savings
+    ```
+
+    ETS(A,N,N) was selected, which is simple exponential smoothing with only additive error.
+
+c.  What are the fitted parameters of the model?
+
+    ```{r}
+    fit_savings|>tidy()
+    ```
+
+d.  Based on the fitted parameters, what simple forecasting method is this similar to?
+
+    Since $\alpha\approx 1$, this is similar to naive method.
+
+e.  Based on your answer to d), how does the width of the prediction interval change as a function of the forecast horizon $h$? Make a plot to verify this.
+
+    The prediction interval will widen as the forecast horizon increases, which means the forecast variance increases with h. This can be also be interpreted through the variance of naive method, which is $Var(e_h​)=hσ^2$.
+
+    ```{r}
+    fc<-fit_savings|>
+      forecast(h=20)
+    autoplot(fc,canada_savings)
+    ```
+
+    The plot supports our conclusion.
+
+## 3. Moving averages and differences
+
+Consider the linear trend model $$
+X_t = \beta_0 + \beta_1 t + W_t.
+$$ Define a time series $(Y_t)$ by taking a moving average of $(X_t)$ with a symmetric window of size 7. Define another times series $(Z_t)$ by taking a difference of $(X_t)$.
+
+a.  What is the mean function for $(Y_t)$? What is the ACVF for $(Y_t)$?
+
+    $$
+    Y_t = \frac{1}{7}\sum_{k=-3}^{3} X_{t+k}\\
+    Z_t = X_t - X_{t-1}\\
+    $$
+
+    The mean function is
+
+    $$
+    \mu_{Y_t}= E[Y_t] = \frac{1}{7}\sum_{k=-3}^{3} E[X_{t+k}] \\
+    = \frac{1}{7}\sum_{k=-3}^{3} (\beta_0 + \beta_1(t+k)) \\
+    = \beta_0 + \beta_1 t + \frac{\beta_1}{7}\sum_{k=-3}^{3} k \\
+    = \beta_0 + \beta_1 t
+    $$
+
+    The ACVF is
+
+    $$
+    \gamma_Y(t, t+h) = \text{Cov}(Y_t, Y_{t+h}) \\
+    = \frac{1}{49}\sum_{j=-3}^{3}\sum_{k=-3}^{3} \text{Cov}(X_{t+j}, X_{t+h+k}) \\
+    = \frac{\sigma^2}{49} \cdot |\{(j,k): j - k = h,\ j,k \in \{-3,\ldots,3\}\}|
+    $$
+
+    The number of valid pairs is $m(h) = \max(7 - |h|, 0)$, so: $$\gamma_Y(h) = \begin{cases} \dfrac{\sigma^2}{49}(7 - |h|) & |h| \leq 6 \\ 0 & |h| > 6 \end{cases}$$
+
+b.  What is the mean function for $(Z_t)$? What is its ACVF?
+
+    The mean function is
+
+    $$
+    \mu_Z(t) = E[Z_t] = E[X_t - X_{t-1}] \\
+    = (\beta_0 + \beta_1 t) - (\beta_0 + \beta_1(t-1)) \\
+    = \beta_1
+    $$
+
+    The ACVF is
+
+    $$
+    \gamma_Z(h) = \text{Cov}(Z_t, Z_{t+h}) \\
+    = \text{Cov}(W_t - W_{t-1},\ W_{t+h} - W_{t+h-1})
+    $$
+
+    Using the white noise property$\text{Cov}(W_s, W_r) = \sigma^2 \cdot \mathbf{1}(s = r)$:
+
+    $$
+    \gamma_Z(h) = \begin{cases} 2\sigma^2 & h = 0 \\ -\sigma^2 & |h| = 1 \\ 0 & |h| \geq 2 \end{cases}
+    $$
+
+c.  What is the CCF of $(Y_t)$ and $(Z_t)$?
+
+    $$
+    \gamma_{YZ}(h) = \text{Cov}(Y_t, Z_{t+h}) \\
+    = \text{Cov}\!\left(\frac{1}{7}\sum_{j=-3}^{3}X_{t+j},\ X_{t+h} - X_{t+h-1}\right) \\
+    = \frac{\sigma^2}{7}\sum_{j=-3}^{3}\left[\mathbf{1}(j = h) - \mathbf{1}(j = h-1)\right]
+    $$
+
+    Evaluating over $j \in \{-3, \ldots, 3\}$:
+
+    $$
+    \gamma_{YZ}(h) = \begin{cases} \dfrac{\sigma^2}{7} & h = -3 \\  -\dfrac{\sigma^2}{7} & h = 4 \\ 0 & \text{otherwise} \end{cases}
+    $$
+
+d.  Are $(Y_t)$ and $(Z_t)$ jointly stationary?
+
+    No. Since the mean function for $(Y_t)$ is time dependent, $(Y_t)$ is not stationary and $(Y_t)$ and $(Z_t)$ are not jointly stationary.
+
+## 4. Sample vs population ACF
+
+Consider the signal plus noise model $$
+X_t = \sin(2\pi t/5) + W_t.
+$$
+
+a.  What is the ACF of $(X_t)$?
+
+    The mean function is:
+
+    $$
+    \mu_X(t) = E[X_t] = \sin(2\pi t/5) + E[W_t] = \sin(2\pi t / 5)
+    $$
+
+    The ACVF is:
+
+    $$
+    \gamma_X(t, t+h) = \text{Cov}(X_t, X_{t+h}) \\
+    = \text{Cov}\!\left(\sin(2\pi t/5) + W_t,\ \sin(2\pi(t+h)/5) + W_{t+h}\right) \\
+    = \text{Cov}(W_t, W_{t+h}) \\
+    = \sigma^2 \mathbf{1}(h = 0)
+    $$
+
+    since the deterministic signal $\sin(2\pi t/5)$ contributes nothing to the covariance.
+
+    Therefore the ACF is
+
+    $$
+    \rho_X(h) = \frac{\gamma_X(h)}{\gamma_X(0)} = \mathbf{1}(h = 0) = \begin{cases} 1 & h = 0 \\ 0 & h \neq 0 \end{cases}
+    $$
+
+b.  Simulate a time series $X_1,X_2,\ldots,X_{200}$ from this model and plot its sample ACF.
+
+    ```{r}
+    set.seed(5209)
+    t <- 1:200
+    X <- sin(2 * pi * t / 5) + rnorm(200)
+    X_ts <- as_tsibble(tibble(t = t, X = X), index = t)
+    X_ts |> ACF(X) |> autoplot()
+    ```
+
+c.  Why does the sample ACF not look like the population ACF function?
+
+    The population ACF is $\rho_X(h) = \mathbf{1}(h = 0)$, which equals 1 at lag 0 and 0 elsewhere,
+    resembling white noise. However, the sample ACF exhibits a sinusoidal pattern with period 5.
+
+    This discrepancy arises because $(X_t)$ is not weakly stationary: its mean function
+    $\mu_X(t) = \sin(2\pi t/5)$ is time-varying. The sample ACF estimator is:
+
+    $$
+    \hat{\rho}(h) = \frac{\sum_{t=1}^{T-h}(X_t - \bar{X})(X_{t+h} - \bar{X})}{\sum_{t=1}^{T}(X_t - \bar{X})^2}
+    $$
+    This estimator implicitly assumes stationarity by using a single grand mean $\bar{X}$ to
+    centre the series. When the true mean is time-varying, $\bar{X}$ is a poor estimate of
+    $\mu_X(t)$ at each time point, and the residuals $(X_t - \bar{X})$ retain the sinusoidal
+    structure of the signal, causing the sample ACF to reflect the periodicity of
+    $\sin(2\pi t/5)$ rather than the true population ACF.
+
+d.  Why does the asymptotic normality theorem for the ACF not apply?
+
+    The asymptotic normality does not apply because $(X_t)$ is not weakly stationary, since its mean function $\mu_X(t) = \sin(2\pi t / 5)$ depends on $t$.
+
+## 5. Gaussian processes
+
+Consider a random vector $(X_1,X_2,X_3,X_4)$ that has the joint Gaussian distribution
+
+$$
+\begin{bmatrix} X_1 \\ X_2 \\ X_3 \\ X_4\end{bmatrix} \sim N\left(\begin{bmatrix} -0.5 \\ 0 \\ 0.5 \\ 2\end{bmatrix}, \begin{bmatrix} 3 & 1 & 1 & 1 \\ 1 & 3 & 1 & 1 \\ 1 & 1 & 3 & 2 \\ 1 & 1 & 2 & 3\end{bmatrix} \right)
+$$
+
+```{r}
+A <- matrix(c(3, 1, 1, 1,
+              1, 3, 1, 1,
+              1, 1, 3, 2,
+              1, 1, 2, 3),
+            nrow = 4, ncol = 4, byrow = TRUE)
+```
+
+Partition the random vector as $\mathbf{X} = (\mathbf{X}_A^\top, X_4)^\top$ where
+$\mathbf{X}_A = (X_1, X_2, X_3)^\top$. The joint distribution gives:
+
+$$
+\boldsymbol{\mu}_A = \begin{bmatrix}-0.5\\0\\0.5\end{bmatrix}, \quad \mu_4 = 2, \quad
+\Sigma_{AA} = \begin{bmatrix}3&1&1\\1&3&1\\1&1&3\end{bmatrix}, \quad
+\Sigma_{A4} = \begin{bmatrix}1\\1\\2\end{bmatrix}, \quad \Sigma_{44} = 3
+$$
+
+The conditional distribution formula for jointly Gaussian random vectors gives:
+
+$$
+X_4 \mid \mathbf{X}_A = \mathbf{a} \sim N(\mu_{4|A},\ \sigma^2_{4|A})
+$$
+
+where:
+
+$$
+\mu_{4|A} = \mu_4 + \Sigma_{4A}\Sigma_{AA}^{-1}(\mathbf{a} - \boldsymbol{\mu}_A)\\
+\sigma^2_{4|A} = \Sigma_{44} - \Sigma_{4A}\Sigma_{AA}^{-1}\Sigma_{A4}
+$$
+
+a.  What is the marginal variance of $X_4$?
+
+    The marginal variance of $X_4$ is the $(4,4)$ entry of the covariance matrix:
+
+    $$
+    \text{Var}(X_4) = \Sigma_{44} = 3
+    $$
+
+b.  What is the conditional variance of $X_4$, conditioned on the observations $X_1=1,X_2=1,X_3=1$. Does it depend on these particular values? *Hint: The following code snippet creates matrix in R. You may use `solve()` to find the inverse of a matrix.*
+
+    ```{r}
+    Sigma_AA <- A[1:3, 1:3]
+    Sigma_A4 <- A[1:3, 4]
+    Sigma_4A <- A[4, 1:3]
+    Sigma_44 <- A[4, 4]
+    cond_var <- Sigma_44 - Sigma_4A %*% solve(Sigma_AA) %*% Sigma_A4
+    cat("Conditional variance of X_4:", cond_var, "\n")
+    ```
+
+c.  What is the conditional mean of $X_4$, conditioned on the observations $X_1=1,X_2=1,X_3=1$?
+
+    ```{r}
+    mu_A <- c(-0.5, 0, 0.5)
+    mu_4 <- 2
+    a <- c(1, 1, 1)
+    cond_mean <- mu_4 + t(Sigma_A4) %*% solve(Sigma_AA) %*% (a - mu_A)
+    cat("Conditional mean of X4:", cond_mean, "\n")
+    ```
+
+d.  Write a level 95% prediction interval for $X_4$ given these observations.
+
+    ```{r}
+    qnorm(0.975)
+    ```
+
+    ```{r}
+    lower <- cond_mean - 1.96 * sqrt(cond_var)
+    upper <- cond_mean + 1.96 * sqrt(cond_var)
+    cat("95% prediction interval: [", lower, ",", upper, "]\n")
+    ```
